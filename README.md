@@ -1,191 +1,127 @@
-# The Legend of Zelda: Oracle of Ages & Oracle of Seasons
+# Oracles NX
 
-Native macOS, Windows, Linux and Android versions of **Oracle of Ages** and **Oracle of Seasons**
-(Capcom, 2001), rebuilt from the games' own code in C. There is no emulator underneath: the games
-run as native programs, which is what makes widescreen, save states and save sync across your
-devices possible.
+A native Nintendo Switch homebrew port (`.nro`) of **Oracle of Ages** and **Oracle of Seasons**, built on
+[oracles-decomp](https://github.com/kirby-letsgo/oracles-decomp), a reimplementation of both Game Boy Color
+games in readable C. The games run as native code: no CPU emulator and no ROM code.
 
-**No game data is included.** You need your own Oracle of Ages and/or Oracle of Seasons (USA) ROM.
-The app reads it once, keeps the graphics, sound and data, and never needs it again.
+- Both games in one app, with a launcher showing each game's three save files
+- Save states (4 slots with thumbnails) and a Resume state on quit
+- Screen filters (sharp, scanlines, LCD grid, CRT) and pixel or fill scaling
+- Widescreen mode (16:9) that shows the neighbouring rooms beside the game
+- Fully remappable controls, fast-forward and optional quality-of-life toggles
+- Full screen in handheld (720p) and docked (1080p)
 
-## Quality-of-life improvements
+> **No game files are included.** You need your own Oracle of Ages / Oracle of Seasons (USA, Australia)
+> ROMs. This project is not affiliated with or endorsed by Nintendo or Capcom.
 
-What this port adds on top of the original games:
+## Credits
 
-- **Widescreen (16:9)** — see the rooms around you, not just the one you're in
-- **Save states** — 4 slots with thumbnails, plus a Resume state from wherever you last quit
-- **Save sync** — your saves and states follow you between desktop and phone, no passwords
-- **Remappable controls** — every button, for keyboard and gamepad
-- **Fast-forward** — hold Tab, or the right trigger
-- **Screen filters** — sharp, scanlines, LCD grid, CRT, or the xBRZ and hqx pixel-art scalers, and true Game Boy Color colours
-- **Fast text and faster menus** — optional, off by default
-- **Quick swap and 4 item slots** — optional, off by default
+- **[kirby-letsgo](https://github.com/kirby-letsgo)**: [oracles-decomp](https://github.com/kirby-letsgo/oracles-decomp), the native C reimplementation, launcher, settings, widescreen and save sync. All the real work is theirs.
+- **[Drenn1](https://github.com/Drenn1)** and contributors: [oracles-disasm](https://github.com/Drenn1/oracles-disasm), the community disassembly the decomp is built from.
+- **[devkitPro](https://devkitpro.org)**: devkitA64, libnx and the Switch branch of SDL.
+- **[SDL](https://libsdl.org)**: SDL3, for video, audio and input.
+- **Zenju**: xBRZ pixel-art scaler. **Maxim Stepin / Cameron Zemek**: hqx scaler.
+- **Toniisound**: Nintendo Switch port.
 
-The gameplay toggles are all off until you turn them on, so the default is the game as it shipped.
+## License
+
+GPL v3, the same as oracles-decomp. See [LICENSE](LICENSE). The upstream README is kept as
+[README-original.md](README-original.md).
+
+## Technical overview
+
+The port uses `oracles-native`, the decomp's real native build, unchanged in its game code. On the Switch it
+links SDL3 built from source (devkitPro's `switch-sdl-3.4` branch) and draws through EGL / OpenGL ES 2
+(switch-mesa). The game's threads run as fibers on heap-allocated stacks, since libnx has no `mmap`. Instead
+of a file picker, the app installs the ROMs it finds on the SD card; from then on it never reads the ROM
+again.
+
+## Building (WSL or Linux with devkitPro)
+
+```
+sudo dkp-pacman -S --needed switch-dev switch-cmake switch-pkg-config switch-mesa switch-libdrm_nouveau
+sudo apt install ninja-build git
+git clone https://github.com/toniisound/oracles-nx.git
+cd oracles-nx
+./build_switch.sh
+```
+
+The result is `build-switch/oracles.nro`. The first build downloads and compiles SDL3, so it takes a while.
+After changing the title, author or version, delete `build-switch/` so the `.nacp` is regenerated.
+
+| Option | Effect |
+| --- | --- |
+| `-DORACLES_SWITCH_SYNC=ON` | Enable save sync across devices (needs `switch-curl`) |
+| `-DORACLES_NX_TITLE="..."` | Title in the Homebrew Menu (default `Oracles NX`) |
+| `-DORACLES_NX_AUTHOR="..."` | Author in the Homebrew Menu (default `Toniisound`) |
+| `-DORACLES_NX_VERSION="..."` | Version in the Homebrew Menu (default `1.0`) |
+
+Options go after the script, e.g. `./build_switch.sh -DORACLES_SWITCH_SYNC=ON`.
+
+## Installing
+
+```
+sdmc:/switch/oracles/
+├── oracles.nro
+└── roms/
+    ├── Oracle of Ages (USA).gbc
+    └── Oracle of Seasons (USA).gbc
+```
+
+### ROMs
+
+- Any file name works: games are recognised by their SHA1, not their name.
+- `.gbc`, `.gb`, `.zip` and `.gz` are accepted.
+- Only the USA / Australia versions work:
+
+| Game | SHA1 |
+| --- | --- |
+| Oracle of Ages | `880374fb978b18af4aa529e2e32f7ffb4d7dd2f4` |
+| Oracle of Seasons | `ba1268290fb2b1b70505d2d7b5825fc8a4816a4b` |
+
+On first launch the app installs every ROM it recognises into `ages/` and `seasons/` next to the `.nro`.
+Saves, save states and settings live in `sdmc:/switch/oracles/`, and the engine log in
+`sdmc:/switch/oracles/oracles.log`. Do not share the `ages/` and `seasons/` folders: they hold data from
+your ROM.
+
+## Menu
+
+- The launcher shows both games side by side, each with its three save files, Resume and Load state.
+- A accepts, B goes back.
+- **Add ROM** looks in `roms/` again, for a game added later.
+- Settings (from the launcher or the pause menu): volume, screen filter, scale, colours, widescreen,
+  controls and quality-of-life toggles.
+
+## Default controls
+
+| Button | Action |
+| --- | --- |
+| D-pad / left stick | Move |
+| A | A |
+| B | B |
+| + | Start |
+| − | Select |
+| R | Pause menu (save / load state, quit to launcher) |
+| ZR (hold) | Fast-forward |
+| L | Swap A and B items (with *quick swap*) |
+| X / Y | Extra item buttons (with *4 slots*) |
+| HOME | System menu |
+
+Every button can be remapped in Settings > Controls.
+
+## Changes from oracles-decomp
+
+- `CMakeLists.txt`: Switch target `oracles-nx` that builds SDL3 from devkitPro's Switch branch and packs the `.nro` with its icon and `.nacp`.
+- `src/platform/app.c`: ROM install from `sdmc:/switch/oracles/roms/`, data and log on the SD card, Nintendo button layout in menus and button names.
+- `src/platform/window.c`: full-screen OpenGL window (SDL on the Switch needs EGL).
+- `src/rt/fibers.c`: fiber stacks from the heap instead of `mmap`.
+- `src/ui/controls.c`: Switch default buttons (Pause on R).
+- `src/sync/http_curl.c`, `src/sync/http_none.c`: statically linked libcurl, or no sync.
+- `build_switch.sh`, `packaging/switch/icon.jpg`: build script and Homebrew Menu icon.
 
 ---
 
-**AI DISCLOSURE**
+This emulator is completely free and open-source. Optional donations to support the development are always welcome:
 
-This native implementation has used help from generative AI, specifically Claude Opus.
-
-If you don't want to use it for that I completely understand.
-
----
-
-## Download
-
-Get the latest build for your system from the
-[**nightly release**](https://github.com/kirby-letsgo/oracles-decomp/releases/tag/nightly), rebuilt
-automatically on every change:
-
-| System | File | First launch |
-|---|---|---|
-| macOS 11+ (Apple Silicon and Intel) | `Oracles-macOS.dmg` | Open the DMG and drag Oracles out. It isn't notarized, so the first time right-click it and choose **Open**. |
-| Windows 10/11 (64-bit) | `Oracles-windows-x64.zip` | Unzip and run `Oracles.exe`. If SmartScreen warns about an unknown publisher, choose **More info → Run anyway**. |
-| Linux (x86_64) | `Oracles-linux-x86_64.AppImage` | `chmod +x` the file, then run it. |
-| Android 8+ (arm64) | `Oracles-android.apk` | Install the APK (allow installs from your browser or file manager). |
-
-Each desktop download is a single self-contained file; nothing else needs installing.
-
-## Adding your ROM
-
-The app opens on its launcher, with Ages and Seasons side by side. A game you have no ROM for yet
-shows **NOT INSTALLED** and an **ADD ROM...** row — choose it and the file picker opens. Do the same
-on the other tab to add the second game. Nothing is asked for before the launcher appears.
-
-The ROM can be a plain `.gbc`/`.gb` file **or a `.zip` or `.gz`** holding one, so a freshly
-downloaded archive works as it came. From a zip the `.gbc`/`.gb` file inside is taken, otherwise the
-largest one. `.7z` isn't read — extract it first.
-
-Your ROM has to be the USA release of either game; the app checks it and says so if it isn't. On
-Android, copy the ROM to the phone's Downloads first so the picker can reach it.
-
-## Playing
-
-The launcher shows each game's three save files with name, hearts and essences, plus **Resume** (the
-state from when you last quit), **Load state** and the title screen. Choosing a file boots straight
-into it.
-
-### Controls
-
-| | Keyboard | Gamepad (Xbox / PlayStation) |
-|---|---|---|
-| Move | Arrow keys | D-pad or left stick |
-| A | `X` | A / Cross |
-| B | `Z` | X / Square |
-| Start | Return | Start / Options |
-| Select | Backspace or Right Shift | Back / Share |
-| Pause | Esc | Guide / PS button |
-| Fast-forward | Hold Tab | Hold RT / R2 |
-| Quick swap | `C` | LB / L1 |
-| Item X / Item Y | `A` / `S` | Y / Triangle, B / Circle |
-| Mute | `M` | |
-| Fullscreen | F11 or Cmd+F | |
-| Save / load state slot 1 | Cmd+S / Cmd+R | |
-
-Every button, including Pause, Fast-forward, Swap and the item buttons, can be remapped in
-Settings > CONTROLS: pick a row, then press the key or controller button (triggers included) you
-want for it. Quick swap and the item buttons only do something once their gameplay toggles are on.
-The window resizes in whole-pixel steps.
-
-### Settings
-
-From the launcher or the pause menu: volume, screen filter (sharp, scanlines, LCD grid, CRT, and the
-two pixel-art scalers XBRZ and HQX, which round off jagged diagonals instead of turning each pixel
-into a square — they are two different algorithms, so it is worth trying both), scale
-(**pixel** for whole-pixel steps, **fill** for the largest size that fits), Game Boy Color colours,
-fullscreen and controls.
-
-There are also quality-of-life toggles, **all off by default**:
-
-- **Fast text** and **faster menus**
-- **Quick swap**: `C` swaps the A and B items
-- **4 slots**: `A`/`S` become two more item buttons — highlight an item in the inventory and press
-  one to assign it, then hold it in play to use that item. In widescreen they get their own X and Y
-  boxes at the left of the status bar, so all four items are on screen at once
-
-### Save states
-
-Esc pauses the game: Resume, Save state, Load state (4 slots, each with a thumbnail and its date)
-and Quit, which saves a Resume state and returns to the launcher. Cmd+S and Cmd+R are shortcuts for
-slot 1. Messages like *state saved* or *sound off* appear at the bottom of the screen.
-
-Save states work across every platform — all 64-bit builds share one layout, so a state made on your
-desktop loads on your phone.
-
-## Widescreen
-
-Settings > WIDESCREEN widens the picture to 256x144 (16:9 at the game's own 144 lines). The game's
-original 160 pixels stay in the middle, untouched, with 48 pixels either side showing the rooms
-around you, decoded from your ROM: the overworld grid (with the right season in Seasons) and, in
-dungeons, the rooms through a doorway once you've visited them. Large dungeon rooms simply show more
-of themselves.
-
-The status bar runs the whole way across rather than sitting in a box in the middle. With **4 slots**
-on, the X and Y items get their own boxes at its left end and the game's own bar slides right to make
-room, so the four item slots read across as X, Y, B, A. Holding X or Y then leaves the B box showing
-its own item, instead of borrowing it to display the one you pressed.
-
-The sides scroll along with every room change. Nothing moves in them — the game only runs the room
-you're in — and they show each room as the ROM describes it, so a chest you opened or grass you cut
-won't update until you walk back there. Houses, caves and cutscenes use the game's border colour
-instead, while a menu fills them with its own colour and keeps the status bar across the top.
-**DIM SIDES** (on by default) draws the sides slightly darker than the live room.
-
-## Save sync
-
-Settings > SYNC keeps your saves in step across devices, with no passwords: **CREATE ACCOUNT** gives
-you a 16-digit code, and **ENTER CODE** on another device joins the same account.
-
-Synced: each game's save, the save-state slots with their pictures and item buttons, and your
-settings. Never your ROM or anything derived from it.
-
-It syncs when the launcher opens, before a game starts, and when you leave a game or the app;
-**SYNC NOW** does it by hand. A sync that fails because you're offline is retried automatically, and
-again the moment the app comes back to the foreground. If the same save changed on two devices, a
-**KEEP WHICH?** screen shows you both — the files and hearts, or the state's picture — and you pick.
-The copy you turn down isn't thrown away: it stays in the game's folder as `<name>.bak` (a save
-state's picture too), until the next KEEP WHICH? about the same file replaces it.
-
-## Android
-
-Touch controls sit under the game in portrait and at its sides in landscape: D-pad (diagonals by
-touching between the arms), A, B, Start, Select, Pause and fast-forward (`>>`, hold), plus X and Y
-when 4 slots is on. They hide when you use a controller or keyboard and come back on the next touch.
-The back button pauses, and goes back in menus.
-
-Leaving the app saves the game and a Resume state; coming back opens the pause menu.
-
-## Where your files are
-
-Everything — the data read from your ROM, your saves, save states and settings — lives in one
-per-user folder:
-
-| System | Folder |
-|---|---|
-| macOS | `~/Library/Application Support/oracles-decomp/oracles/` |
-| Windows | `%APPDATA%\oracles-decomp\oracles\` |
-| Linux | `~/.local/share/oracles-decomp/oracles/` |
-| Android | the app's own storage (removed when you uninstall) |
-
-Deleting that folder resets the app; you'll be asked for your ROM again.
-
-## Reporting problems
-
-Please open an [issue](https://github.com/kirby-letsgo/oracles-decomp/issues) with your system, which
-game, and what you were doing. Never attach a ROM or a save made from one. On Android,
-`adb logcat -s oracles` shows the app's messages.
-
-## How it works
-
-Every routine the games run is readable C: all of Ages, and 99% of Seasons (shared with Ages where
-the two games agree, hand-written where Seasons differs; the rest generated from the disassembly).
-The native build runs both games with no CPU emulator and no ROM code at all — on first launch the
-app takes the graphics, sound and data out of your ROM and zeroes the code bytes, because it no
-longer needs them.
-
-Behaviour is checked against the original ROM by replaying full playthroughs and comparing every C
-routine with the original code it replaces.
-
-To build it yourself, or work on it, see [DEVELOPMENT.md](DEVELOPMENT.md).
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/toniisound)
+[![PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/toniisound)

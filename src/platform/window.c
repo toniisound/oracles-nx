@@ -23,9 +23,18 @@ static bool saved_size(const char *size_path, int *w, int *h) {
 }
 
 bool oracles_open_window(const char *title, const char *size_path, SDL_Window **win, SDL_Renderer **ren, SDL_Texture **tex) {
+#ifdef __SWITCH__
+  // one full-screen window; SDL switches it between 720p handheld and 1080p docked
+  (void)size_path; (void)default_scale; (void)saved_size;
+  // The Switch's SDL only makes windows on EGL, which it loads for SDL_WINDOW_OPENGL windows alone
+  // ("EGL not initialized" otherwise); the renderer is GLES2 on top of it.
+  SDL_SetHint(SDL_HINT_RENDER_DRIVER, "opengles2");
+  if (!SDL_CreateWindowAndRenderer(title, 1280, 720, SDL_WINDOW_FULLSCREEN | SDL_WINDOW_OPENGL, win, ren)) return false;
+#else
   int w, h;
   if (!saved_size(size_path, &w, &h)) { int s = default_scale(); w = FB_W * s; h = FB_H * s; }
   if (!SDL_CreateWindowAndRenderer(title, w, h, SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY, win, ren)) return false;
+#endif
   SDL_SetWindowMinimumSize(*win, FB_W, FB_H);
   SDL_SetRenderDrawColor(*ren, 0, 0, 0, 255);
   *tex = SDL_CreateTexture(*ren, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING, FB_W, FB_H);
@@ -42,6 +51,9 @@ bool oracles_window_key(SDL_Window *win, const SDL_KeyboardEvent *key) {
 }
 
 void oracles_close_window(SDL_Window *win, const char *size_path) {
+#ifdef __SWITCH__
+  return;
+#endif
   if (!size_path || (SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN)) return;
   int w, h;
   if (!SDL_GetWindowSize(win, &w, &h)) return;

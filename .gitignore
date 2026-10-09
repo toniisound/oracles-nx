@@ -14,3 +14,5 @@ __pycache__/
 tas/*.inputs.state
 *.savestate
 build-win/
+build-switch/
+*.patch

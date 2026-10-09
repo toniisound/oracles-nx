@@ -34,6 +34,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef __SWITCH__
+#include <switch.h>
+#include <dirent.h>
+#include <strings.h>
+#include <sys/stat.h>
+#endif
 
 #define AUDIO_TARGET_BYTES (APU_SAMPLE_RATE / 10 * 4)
 #define ASSETS_VERSION 1
@@ -128,6 +134,13 @@ static const char *key_name(int sc) {
 }
 static const char *pad_name(int button) {
   static char buf[32];
+#ifdef __SWITCH__
+  // SDL names buttons by position (south, east...); show what is printed on the Switch's buttons
+  static const char *const nx[] = {"B", "A", "Y", "X", "MINUS", "HOME", "PLUS", "LSTICK", "RSTICK", "L", "R", "UP", "DOWN", "LEFT", "RIGHT"};
+  if (button == PAD_RIGHT_TRIGGER) return "ZR";
+  if (button == PAD_LEFT_TRIGGER) return "ZL";
+  if (button >= 0 && button < (int)(sizeof nx / sizeof nx[0])) return nx[button];
+#endif
   if (button == PAD_RIGHT_TRIGGER) return "RT";
   if (button == PAD_LEFT_TRIGGER) return "LT";
   const char *s = SDL_GetGamepadStringForButton((SDL_GamepadButton)button);
@@ -186,8 +199,48 @@ static const char *const game_ids[UI_GAMES] = {"ages", "seasons"};
 static bool poll_event(SDL_Event *ev);
 static void show_status(const char *msg);
 
+#ifdef __SWITCH__
+// No file picker on the Switch: the player copies ROMs (or .zip/.gz) into SWITCH_ROM_DIR and the
+// app installs every one it recognises. Returns how many games it installed.
+#define SWITCH_APP_DIR "sdmc:/switch/oracles/"
+#define SWITCH_ROM_DIR SWITCH_APP_DIR "roms/"
+
+static bool rom_like(const char *name) {
+  const char *dot = strrchr(name, '.');
+  if (!dot) return false;
+  static const char *const exts[] = {".gbc", ".gb", ".zip", ".gz", ".7z"};
+  for (size_t i = 0; i < sizeof exts / sizeof exts[0]; i++)
+    if (!strcasecmp(dot, exts[i])) return true;
+  return false;
+}
+
+static int switch_install_roms(const char *cache, char *last_game, bool only_missing) {
+  if (only_missing && cached(cache, "ages") && cached(cache, "seasons")) return 0;
+  DIR *d = opendir(SWITCH_ROM_DIR);
+  if (!d) { fprintf(stderr, "no ROM folder %s\n", SWITCH_ROM_DIR); return 0; }
+  int installed = 0;
+  struct dirent *e;
+  while ((e = readdir(d))) {
+    if (e->d_name[0] == '.' || !rom_like(e->d_name)) continue;
+    char path[1200], game[16] = "", err[40] = {0};
+    snprintf(path, sizeof path, "%s%s", SWITCH_ROM_DIR, e->d_name);
+    if (extract(path, cache, game, err, sizeof err)) {
+      installed++;
+      if (last_game) snprintf(last_game, 16, "%s", game);
+    } else fprintf(stderr, "skipped %s: %s\n", path, err);
+  }
+  closedir(d);
+  return installed;
+}
+#endif
+
 // .7z is offered so picking one explains itself rather than being greyed out with no reason.
 static bool pick_rom(char *game_out, const char *cache) {
+#ifdef __SWITCH__
+  if (switch_install_roms(cache, game_out, false) > 0) return true;
+  show_status("NO ROMS FOUND");
+  return false;
+#endif
   static const SDL_DialogFileFilter filters[] = {{"ROM or archive", "gbc;gb;zip;gz;7z"}};
   pick_state = 0;
 #ifdef __ANDROID__
@@ -280,6 +333,10 @@ static void settings_store(void) {
 }
 
 static void apply_window_settings(SDL_Window *win) {
+#ifdef __SWITCH__
+  settings.fullscreen = true;     // always full screen
+  (void)win; return;
+#endif
 #ifdef __ANDROID__
   settings.fullscreen = true;
 #endif
@@ -288,6 +345,9 @@ static void apply_window_settings(SDL_Window *win) {
 
 // Turning widescreen on or off reshapes a desktop window to the new picture at its current scale.
 static void fit_window_to_picture(SDL_Window *win) {
+#ifdef __SWITCH__
+  (void)win; return;
+#endif
 #ifndef __ANDROID__
   if (SDL_GetWindowFlags(win) & SDL_WINDOW_FULLSCREEN) return;
   int w, h;
@@ -677,8 +737,14 @@ static bool menu_button(const SDL_Event *ev, UiButton *b) {
     case SDL_GAMEPAD_BUTTON_DPAD_DOWN: *b = UI_DOWN; return true;
     case SDL_GAMEPAD_BUTTON_DPAD_LEFT: *b = UI_LEFT; return true;
     case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: *b = UI_RIGHT; return true;
+#ifdef __SWITCH__
+    // Nintendo layout: A (east) accepts, B (south) goes back
+    case SDL_GAMEPAD_BUTTON_EAST: case SDL_GAMEPAD_BUTTON_START: *b = UI_ACCEPT; return true;
+    case SDL_GAMEPAD_BUTTON_SOUTH: case SDL_GAMEPAD_BUTTON_WEST: *b = UI_BACK; return true;
+#else
     case SDL_GAMEPAD_BUTTON_SOUTH: case SDL_GAMEPAD_BUTTON_START: *b = UI_ACCEPT; return true;
     case SDL_GAMEPAD_BUTTON_EAST: case SDL_GAMEPAD_BUTTON_WEST: *b = UI_BACK; return true;
+#endif
     default: return false;
     }
   }
@@ -1165,6 +1231,7 @@ static GameEnd run_game(SDL_Window *win, SDL_Renderer *ren, SDL_Texture *tex, co
   SDL_SetWindowTitle(win, title);
   SDL_AudioSpec spec = {SDL_AUDIO_S16, 2, APU_SAMPLE_RATE};
   SDL_AudioStream *audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
+  if (!audio) fprintf(stderr, "audio: %s\n", SDL_GetError());
   if (audio) { SDL_SetAudioStreamGain(audio, volume_gain(false)); SDL_ResumeAudioStreamDevice(audio); }
 
   static uint8_t rgb[FB_W * FB_H * 3], paused_rgb[FB_W * FB_H * 3];
@@ -1407,19 +1474,33 @@ int main(int argc, char **argv) {
 #endif
   // ORACLES_TOUCH=1 shows the overlay on desktop, with the mouse as a finger
   if (getenv("ORACLES_TOUCH")) { touch_on = touch_mouse = true; SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "1"); }
-  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) { fprintf(stderr, "%s\n", SDL_GetError()); return 2; }
+#ifdef __SWITCH__
+  mkdir("sdmc:/switch", 0777);
+  mkdir(SWITCH_APP_DIR, 0777);
+  mkdir(SWITCH_ROM_DIR, 0777);
+  // stderr is the engine's log: keep it on the SD card, the only place the player can read it
+  if (freopen(SWITCH_APP_DIR "oracles.log", "w", stderr)) setvbuf(stderr, NULL, _IOLBF, 0);
+#ifdef ORACLES_CURL_LINKED
+  socketInitializeDefault();
+#endif
+  if (!cache_arg) cache_arg = SWITCH_APP_DIR;
+#endif
+  if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) { fprintf(stderr, "SDL_Init: %s\n", SDL_GetError()); return 2; }
   SDL_AddEventWatch(on_app_event, NULL);
   char cache[1024];
   if (cache_arg) snprintf(cache, sizeof cache, "%s%s", cache_arg, cache_arg[strlen(cache_arg) - 1] == '/' ? "" : "/");
   else { char *p = SDL_GetPrefPath("oracles-decomp", "oracles"); if (!p) { fprintf(stderr, "%s\n", SDL_GetError()); return 2; } snprintf(cache, sizeof cache, "%s", p); SDL_free(p); }
   SDL_CreateDirectory(cache);
+#ifdef __SWITCH__
+  if (!rom_arg && !game_arg) switch_install_roms(cache, NULL, true);
+#endif
 
   SDL_Window *win;
   SDL_Renderer *ren;
   SDL_Texture *tex;
   char window_size[1100];
   snprintf(window_size, sizeof window_size, "%swindow.txt", cache);
-  if (!oracles_open_window("Oracles", window_size, &win, &ren, &tex)) { fprintf(stderr, "%s\n", SDL_GetError()); return 2; }
+  if (!oracles_open_window("Oracles", window_size, &win, &ren, &tex)) { fprintf(stderr, "window: %s\n", SDL_GetError()); return 2; }
   snprintf(settings_path, sizeof settings_path, "%ssettings.ini", cache);
   snprintf(app_cache, sizeof app_cache, "%s", cache);
   sync_config_load(&sync_cfg, cache);

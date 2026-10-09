@@ -11,7 +11,14 @@ static const int default_keys[ACTIONS][KEYS_PER_ACTION] = {
   {29, NO_BINDING}, {40, NO_BINDING}, {42, 229}, {41, NO_BINDING}, {43, NO_BINDING}, {6, NO_BINDING},
   {4, NO_BINDING}, {22, NO_BINDING},
 };
+#ifdef __SWITCH__
+// SDL names the Switch's buttons by position: south is B, east A, west Y, north X. The game's A and
+// B go on the buttons printed A and B, the item buttons on X and Y, and Pause on R (HOME belongs to
+// the system, so there is no Guide button).
+static const int default_pads[ACTIONS] = {11, 12, 13, 14, 1, 0, 6, 4, 10, PAD_RIGHT_TRIGGER, 9, 3, 2};
+#else
 static const int default_pads[ACTIONS] = {11, 12, 13, 14, 0, 2, 6, 4, 5, PAD_RIGHT_TRIGGER, 9, 3, 1};
+#endif
 
 void bindings_default(Bindings *b) {
   memcpy(b->key, default_keys, sizeof b->key);

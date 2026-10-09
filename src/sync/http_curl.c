@@ -1,7 +1,10 @@
 // libcurl, loaded when first needed so the app neither links it nor needs its headers: macOS
 // always has it, most Linux systems do; without it sync is unavailable.
+// ORACLES_CURL_LINKED (Switch) links libcurl statically instead: libnx has no dlopen.
 #include "sync/http.h"
+#ifndef ORACLES_CURL_LINKED
 #include <dlfcn.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +30,32 @@ static struct {
   void (*slist_free_all)(void *);
 } curl;
 
+#ifdef ORACLES_CURL_LINKED
+void *curl_easy_init(void);
+int curl_easy_setopt(void *, int, ...);
+int curl_easy_perform(void *);
+int curl_easy_getinfo(void *, int, ...);
+void curl_easy_cleanup(void *);
+const char *curl_easy_strerror(int);
+void *curl_slist_append(void *, const char *);
+void curl_slist_free_all(void *);
+int curl_global_init(long);
+
+static bool load(void) {
+  if (curl.tried) return curl.ok;
+  curl.tried = true;
+  curl_global_init(3);          // CURL_GLOBAL_ALL
+  curl.easy_init = curl_easy_init;
+  curl.easy_setopt = curl_easy_setopt;
+  curl.easy_perform = curl_easy_perform;
+  curl.easy_getinfo = curl_easy_getinfo;
+  curl.easy_cleanup = curl_easy_cleanup;
+  curl.easy_strerror = curl_easy_strerror;
+  curl.slist_append = curl_slist_append;
+  curl.slist_free_all = curl_slist_free_all;
+  return curl.ok = true;
+}
+#else
 static bool load(void) {
   if (curl.tried) return curl.ok;
   curl.tried = true;
@@ -46,6 +75,7 @@ static bool load(void) {
             curl.easy_strerror && curl.slist_append && curl.slist_free_all;
   return curl.ok;
 }
+#endif
 
 bool http_available(void) { return load(); }
 
